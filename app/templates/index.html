@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Imago Media Gallery</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .media-card {
+            height: 100%;
+            transition: transform 0.3s;
+        }
+        .media-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .media-img {
+            height: 200px;
+            object-fit: cover;
+        }
+        .photographer {
+            font-style: italic;
+            color: #666;
+        }
+        .search-box {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .pagination {
+            margin-top: 30px;
+        }
+        .loader {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .media-details {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            z-index: 1000;
+            overflow: auto;
+            padding: 20px;
+        }
+        .details-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 20px;
+            max-width: 800px;
+            border-radius: 5px;
+        }
+        .close-btn {
+            float: right;
+            font-size: 24px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">Imago Media Gallery</h1>
+        
+        <!-- Search Box -->
+        <div class="search-box">
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="form-group">
+                        <label for="search-query">Search</label>
+                        <input type="text" class="form-control" id="search-query" placeholder="Enter keywords to search...">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label for="photographer-filter">Photographer</label>
+                        <input type="text" class="form-control" id="photographer-filter" placeholder="Filter by photographer...">
+                    </div>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label for="min-date">From Date</label>
+                        <input type="date" class="form-control" id="min-date">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label for="max-date">To Date</label>
+                        <input type="date" class="form-control" id="max-date">
+                    </div>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button id="search-btn" class="btn btn-primary w-100">Search</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Loading Indicator -->
+        <div id="loader" class="loader">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading media...</p>
+        </div>
+        
+        <!-- Results -->
+        <div id="results" class="row">
+            <!-- Media cards will be inserted here -->
+        </div>
+        
+        <!-- Pagination -->
+        <div id="pagination" class="d-flex justify-content-center">
+            <nav aria-label="Page navigation">
+                <ul class="pagination">
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#" id="prev-page">Previous</a>
+                    </li>
+                    <li class="page-item active">
+                        <a class="page-link" href="#">1</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="#" id="next-page">Next</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+    
+    <!-- Media Details Modal -->
+    <div id="media-details" class="media-details">
+        <div class="details-content">
+            <span class="close-btn" id="close-details">&times;</span>
+            <div id="details-content">
+                <!-- Details will be inserted here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Media Card Template -->
+    <template id="media-card-template">
+        <div class="col-md-4 mb-4">
+            <div class="card media-card">
+                <img src="" class="card-img-top media-img" alt="Media Image">
+                <div class="card-body">
+                    <h5 class="card-title media-title">Media Title</h5>
+                    <p class="card-text photographer">Photographer Name</p>
+                    <p class="card-text media-date">Date</p>
+                    <button class="btn btn-sm btn-outline-primary view-details">View Details</button>
+                </div>
+            </div>
+        </div>
+    </template>
+    
+    <script>
+        // Global variables
+        let currentPage = 1;
+        const pageSize = 12;
+        let totalResults = 0;
+        
+        // DOM Elements
+        const searchQueryInput = document.getElementById('search-query');
+        const photographerFilter = document.getElementById('photographer-filter');
+        const minDateFilter = document.getElementById('min-date');
+        const maxDateFilter = document.getElementById('max-date');
+        const searchBtn = document.getElementById('search-btn');
+        const resultsContainer = document.getElementById('results');
+        const loader = document.getElementById('loader');
+        const prevPageBtn = document.getElementById('prev-page');
+        const nextPageBtn = document.getElementById('next-page');
+        const mediaDetails = document.getElementById('media-details');
+        const closeDetailsBtn = document.getElementById('close-details');
+        const detailsContent = document.getElementById('details-content');
+        
+        // Event Listeners
+        searchBtn.addEventListener('click', () => {
+            currentPage = 1;
+            searchMedia();
+        });
+        
+        prevPageBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (currentPage > 1) {
+                currentPage--;
+                searchMedia();
+            }
+        });
+        
+        nextPageBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            currentPage++;
+            searchMedia();
+        });
+        
+        closeDetailsBtn.addEventListener('click', () => {
+            mediaDetails.style.display = 'none';
+        });
+        
+        // Search function
+        function searchMedia() {
+            // Show loader
+            loader.style.display = 'block';
+            resultsContainer.innerHTML = '';
+            
+            // Build query parameters
+            const query = searchQueryInput.value.trim();
+            const photographer = photographerFilter.value.trim();
+            const minDate = minDateFilter.value;
+            const maxDate = maxDateFilter.value;
+            
+            let url;
+            let params = new URLSearchParams();
+            
+            // Determine if we should use search or filter endpoint
+            if (query && !photographer && !minDate && !maxDate) {
+                // Use search endpoint if only query provided
+                url = '/api/search';
+                params.append('q', query);
+            } else {
+                // Use filter endpoint for advanced filtering
+                url = '/api/filter';
+                if (query) params.append('query', query);
+                if (photographer) params.append('photographer', photographer);
+                if (minDate) params.append('min_date', minDate);
+                if (maxDate) params.append('max_date', maxDate);
+            }
+            
+            // Add pagination parameters
+            params.append('page', currentPage);
+            params.append('size', pageSize);
+            
+            // Make API request
+            fetch(`${url}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    displayResults(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching media:', error);
+                    resultsContainer.innerHTML = '<div class="col-12 text-center"><p>Error loading media. Please try again.</p></div>';
+                })
+                .finally(() => {
+                    loader.style.display = 'none';
+                });
+        }
+        
+        // Display results
+        function displayResults(data) {
+            totalResults = data.total;
+            const hits = data.hits;
+            
+            if (hits.length === 0) {
+                resultsContainer.innerHTML = '<div class="col-12 text-center"><p>No results found. Try different search terms.</p></div>';
+                return;
+            }
+            
+            // Clear previous results
+            resultsContainer.innerHTML = '';
+            
+            // Get template
+            const template = document.getElementById('media-card-template');
+            
+            // Create a card for each hit
+            hits.forEach(media => {
+                const clone = template.content.cloneNode(true);
+                
+                // Set image
+                const img = clone.querySelector('.media-img');
+                img.src = media.image_url;
+                img.alt = media.suchtext || 'Media image';
+                
+                // Set title and info
+                const title = clone.querySelector('.media-title');
+                title.textContent = truncateText(media.suchtext || 'Untitled', 50);
+                
+                const photographer = clone.querySelector('.photographer');
+                photographer.textContent = media.fotografen || 'Unknown photographer';
+                
+                const date = clone.querySelector('.media-date');
+                date.textContent = formatDate(media.datum);
+                
+                // Setup view details button
+                const viewDetailsBtn = clone.querySelector('.view-details');
+                viewDetailsBtn.addEventListener('click', () => {
+                    showMediaDetails(media);
+                });
+                
+                // Add to results
+                resultsContainer.appendChild(clone);
+            });
+            
+            // Update pagination
+            updatePagination();
+        }
+        
+        // Update pagination controls
+        function updatePagination() {
+            const totalPages = Math.ceil(totalResults / pageSize);
+            
+            // Update previous button
+            if (currentPage <= 1) {
+                prevPageBtn.parentElement.classList.add('disabled');
+            } else {
+                prevPageBtn.parentElement.classList.remove('disabled');
+            }
+            
+            // Update next button
+            if (currentPage >= totalPages) {
+                nextPageBtn.parentElement.classList.add('disabled');
+            } else {
+                nextPageBtn.parentElement.classList.remove('disabled');
+            }
+            
+            // Update current page indicator
+            const pageLinks = document.querySelectorAll('.pagination .page-item:not(:first-child):not(:last-child)');
+            pageLinks.forEach(link => link.remove());
+            
+            const prevPageItem = document.querySelector('.pagination .page-item:first-child');
+            
+            // Add numbered page links (show up to 5 pages)
+            const startPage = Math.max(1, currentPage - 2);
+            const endPage = Math.min(totalPages, startPage + 4);
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const li = document.createElement('li');
+                li.classList.add('page-item');
+                if (i === currentPage) {
+                    li.classList.add('active');
+                }
+                
+                const a = document.createElement('a');
+                a.classList.add('page-link');
+                a.href = '#';
+                a.textContent = i;
+                a.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    currentPage = i;
+                    searchMedia();
+                });
+                
+                li.appendChild(a);
+                prevPageItem.parentNode.insertBefore(li, nextPageBtn.parentElement);
+            }
+        }
+        
+        // Show media details
+        function showMediaDetails(media) {
+            // Build details content
+            let html = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <img src="${media.image_url}" class="img-fluid mb-3" alt="Media image">
+                    </div>
+                    <div class="col-md-6">
+                        <h3>${media.suchtext || 'Untitled'}</h3>
+                        <p><strong>ID:</strong> ${media.bildnummer}</p>
+                        <p><strong>Photographer:</strong> ${media.fotografen || 'Unknown'}</p>
+                        <p><strong>Date:</strong> ${formatDate(media.datum)}</p>
+                        <p><strong>Dimensions:</strong> ${media.breite || 0} x ${media.hoehe || 0}</p>
+                    </div>
+                </div>
+            `;
+            
+            detailsContent.innerHTML = html;
+            mediaDetails.style.display = 'block';
+        }
+        
+        // Helper function to truncate text
+        function truncateText(text, maxLength) {
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+        
+        // Helper function to format date
+        function formatDate(dateString) {
+            if (!dateString) return 'Unknown date';
+            
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleDateString();
+            } catch (e) {
+                return dateString;
+            }
+        }
+        
+        // Initial search on page load
+        searchMedia();
+    </script>
+</body>
+</html> 
