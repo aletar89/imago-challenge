@@ -36,12 +36,15 @@ def test_search_endpoint(client):
     if data["total"] > 0 and len(data["hits"]) > 0:
         hit = data["hits"][0]
         # Verify hit has expected fields
+        assert "id" in hit
+        assert "search_text" in hit
+        assert "photographer" in hit
+        assert "date" in hit
+        assert "thumbnail_url" in hit
         assert "bildnummer" in hit
-        assert "suchtext" in hit
-        assert "image_url" in hit
         # Verify image URL format
         image_base_url = os.environ.get("IMAGE_BASE_URL", "https://www.imago-images.de")
-        assert hit["image_url"].startswith(image_base_url)
+        assert hit["thumbnail_url"].startswith(image_base_url)
 
 
 def test_empty_search_returns_all_results(client):
@@ -61,7 +64,7 @@ def test_empty_search_returns_all_results(client):
     assert len(data["hits"]) > 0
 
 
-@pytest.mark.parametrize("filter_type", ["fotografen", "min_date", "max_date"])
+@pytest.mark.parametrize("filter_type", ["photographer", "min_date", "max_date"])
 def test_filtered_search_reduces_results(client, filter_type):
     """
     Test that applying filters reduces the number of search results.
@@ -90,12 +93,12 @@ def test_filtered_search_reduces_results(client, filter_type):
 
     # Set filter param based on filter type
     filter_value = ""
-    if filter_type == "fotografen":
-        filter_value = first_result["fotografen"]
+    if filter_type == "photographer":
+        filter_value = first_result["photographer"]
     elif filter_type == "min_date":
-        filter_value = first_result["datum"]
+        filter_value = first_result["date"]
     elif filter_type == "max_date":
-        filter_value = first_result["datum"]
+        filter_value = first_result["date"]
 
     # Now search with the filter applied
     filtered_response = client.get(f"/api/search?q=&{filter_type}={filter_value}")
@@ -114,9 +117,9 @@ def test_filtered_search_reduces_results(client, filter_type):
     # If we got results, verify they match the filter
     if filtered_data["total"] > 0:
         for hit in filtered_data["hits"]:
-            if filter_type == "fotografen":
-                assert hit["fotografen"] == filter_value
+            if filter_type == "photographer":
+                assert hit["photographer"] == filter_value
             elif filter_type == "min_date":
-                assert hit["datum"] >= filter_value
+                assert hit["date"] >= filter_value
             elif filter_type == "max_date":
-                assert hit["datum"] <= filter_value
+                assert hit["date"] <= filter_value
