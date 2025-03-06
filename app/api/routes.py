@@ -3,7 +3,10 @@
 This module defines the API endpoints for the media search functionality.
 """
 
+from datetime import datetime
+import logging
 from flask import Blueprint, current_app, jsonify, request
+import bleach
 
 from app.services.monitoring import monitor_api
 
@@ -46,17 +49,30 @@ def search():
     Filter params:
     - photographer: Filter by photographer name
     - min_date/max_date: Filter by date range
-    - Any other field in the document can be used as a filter
     """
     query = request.args.get("q", "")
     page = int(request.args.get("page", 1))
     size = int(request.args.get("size", 10))
 
-    # Extract filter parameters
     filters = {}
-    for key, value in request.args.items():
-        if key not in ["q", "page", "size"]:
-            filters[key] = value
+    if "photographer" in request.args:
+        filters["photographer"] = bleach.clean(
+            request.args.get("photographer", ""), strip=True, tags=[]
+        )
+    if "min_date" in request.args:
+        min_date = request.args.get("min_date", "")
+        try:
+            datetime.fromisoformat(min_date)
+            filters["min_date"] = min_date
+        except ValueError:
+            logging.error(f"Invalid min_date format: {min_date}")
+    if "max_date" in request.args:
+        max_date = request.args.get("max_date", "")
+        try:
+            datetime.fromisoformat(max_date)
+            filters["max_date"] = max_date
+        except ValueError:
+            logging.error(f"Invalid max_date format: {max_date}")
 
     # Get the Elasticsearch service from the app context
     es_service = current_app.elasticsearch
