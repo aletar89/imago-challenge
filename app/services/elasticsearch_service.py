@@ -1,6 +1,6 @@
 from elasticsearch import Elasticsearch
 import logging
-from typing import Dict, List, Any, Tuple, Optional, Union, cast
+from typing import Any, Tuple, Optional, Union, cast
 from elasticsearch.helpers import bulk
 from elasticsearch.exceptions import NotFoundError
 import json
@@ -45,7 +45,7 @@ class ElasticsearchService:
         )
         logging.info(f"Connected to Elasticsearch at {host}:{port}")
 
-    def search(self, query: str, page: int = 1, size: int = 10) -> Dict[str, Any]:
+    def search(self, query: str, page: int = 1, size: int = 10) -> dict[str, Any]:
         """Search for media content.
 
         Args:
@@ -60,12 +60,12 @@ class ElasticsearchService:
         from_value = (page - 1) * size
 
         # Build the query
-        search_query: Dict[str, Any]
+        search_query: dict[str, Any]
         if query:
             search_query = {
                 "multi_match": {
                     "query": query,
-                    "fields": ["suchtext", "bildnummer", "fotografen"],
+                    "fields": ["suchtext", "fotografen"],
                 }
             }
         else:
@@ -82,7 +82,7 @@ class ElasticsearchService:
         # Process the results
         return self._process_search_results(response)
 
-    def get_by_id(self, media_id: str) -> Optional[Dict[str, Any]]:
+    def get_by_id(self, media_id: str) -> Optional[dict[str, Any]]:
         """Get media content by ID.
 
         Args:
@@ -91,7 +91,7 @@ class ElasticsearchService:
         Returns:
             Media item if found, None otherwise
         """
-        id_query: Dict[str, Any] = {"term": {"bildnummer": media_id}}
+        id_query: dict[str, Any] = {"term": {"bildnummer": media_id}}
 
         # Execute the search
         response = self.client.search(
@@ -109,8 +109,8 @@ class ElasticsearchService:
         return None
 
     def filter(
-        self, filters: Dict[str, str], page: int = 1, size: int = 10
-    ) -> Dict[str, Any]:
+        self, filters: dict[str, str], page: int = 1, size: int = 10
+    ) -> dict[str, Any]:
         """Filter media content by various criteria.
 
         Args:
@@ -125,21 +125,21 @@ class ElasticsearchService:
         from_value = (page - 1) * size
 
         # Build filter conditions
-        filter_conditions: List[Dict[str, Any]] = []
+        filter_conditions: list[dict[str, Any]] = []
 
         if "photographer" in filters:
             filter_conditions.append({"term": {"fotografen": filters["photographer"]}})
 
         if "min_date" in filters:
-            min_date_range: Dict[str, Any] = {"datum": {"gte": filters["min_date"]}}
+            min_date_range: dict[str, Any] = {"datum": {"gte": filters["min_date"]}}
             filter_conditions.append({"range": min_date_range})
 
         if "max_date" in filters:
-            max_date_range: Dict[str, Any] = {"datum": {"lte": filters["max_date"]}}
+            max_date_range: dict[str, Any] = {"datum": {"lte": filters["max_date"]}}
             filter_conditions.append({"range": max_date_range})
 
         # Build the query
-        filter_query: Dict[str, Any] = {"bool": {"filter": filter_conditions}}
+        filter_query: dict[str, Any] = {"bool": {"filter": filter_conditions}}
 
         # Execute the search
         response = self.client.search(
@@ -152,7 +152,7 @@ class ElasticsearchService:
         # Process the results
         return self._process_search_results(response)
 
-    def _process_search_results(self, response: Any) -> Dict[str, Any]:
+    def _process_search_results(self, response: Any) -> dict[str, Any]:
         """Process Elasticsearch search results.
 
         Args:
@@ -190,7 +190,7 @@ class ElasticsearchService:
 
         return {"total": total, "hits": results}
 
-    def _normalize_item(self, item: Dict[str, Any]) -> None:
+    def _normalize_item(self, item: dict[str, Any]) -> None:
         """Normalize item fields.
 
         Args:
