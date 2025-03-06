@@ -1,3 +1,9 @@
+"""Elasticsearch service implementation.
+
+This module provides the ElasticsearchService class which handles interactions
+with the Elasticsearch backend for media content retrieval.
+"""
+
 import logging
 import os
 from typing import Any
@@ -46,7 +52,7 @@ class ElasticsearchService(MediaFetchService):
             basic_auth=auth,
             verify_certs=verify_certs,
         )
-        logging.info(f"Connected to Elasticsearch at {host}:{port}")
+        logging.info("Connected to Elasticsearch at %s:%s", host, port)
 
     def fetch_media_items(
         self, query: str, page: int, size: int, filters: dict[str, str] | None
@@ -77,7 +83,7 @@ class ElasticsearchService(MediaFetchService):
         )
 
         # Process the results
-        return self._process_search_results(response)
+        return self.process_search_results(response)
 
     def _build_elasticsearch_query(
         self, query: str, filters: dict[str, str] | None

@@ -8,19 +8,16 @@ This script fetches a random sample of 500 entries from Elasticsearch and analyz
 - Field cardinality (number of unique values)
 """
 
-from collections import defaultdict
-import os
-import sys
-import logging
 import argparse
 import json
+import logging
+import os
+import sys
+from collections import defaultdict
 from typing import Any
+
 from dotenv import load_dotenv
 
-# Add the parent directory to the Python path to allow importing app modules
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Import the ElasticsearchService class
 from app.services.elasticsearch_service import ElasticsearchService
 
 
@@ -51,9 +48,6 @@ def load_env_variables():
 
 def parse_args():
     """Parse command line arguments"""
-    # Load environment variables
-    env_vars = load_env_variables()
-
     parser = argparse.ArgumentParser(
         description="Analyze field properties from Elasticsearch sample data"
     )
@@ -66,12 +60,7 @@ def parse_args():
     parser.add_argument("--output", help="Output file for the JSON report (optional)")
 
     args = parser.parse_args()
-
-    # Validate that required index is provided in .env
-    if not env_vars["index"]:
-        parser.error("Index name is required. Set ELASTICSEARCH_INDEX in .env file.")
-
-    return args, env_vars
+    return args
 
 
 def get_random_sample(
@@ -87,7 +76,7 @@ def get_random_sample(
     Returns:
         List of document dictionaries
     """
-    logging.info(f"Fetching random sample of {size} documents...")
+    logging.info("Fetching random sample of %d documents...", size)
 
     # Create a function_score query with random_score to get random documents
     random_query = {
@@ -105,11 +94,14 @@ def get_random_sample(
         size=size,
     )
 
-    # Process the results
-    results = es_service._process_search_results(response)
+    # Process the results - this returns a tuple (total_count, list of MediaItems)
+    _, media_items = es_service.process_search_results(response)
 
-    logging.info(f"Retrieved {len(results['hits'])} documents")
-    return results["hits"]
+    # Convert MediaItem objects to dictionaries
+    documents = [item.to_dict() for item in media_items]
+
+    logging.info("Retrieved %d documents", len(documents))
+    return documents
 
 
 def analyze_field_properties(documents: list[dict[str, Any]]) -> dict[str, Any]:
@@ -148,7 +140,7 @@ def analyze_field_properties(documents: list[dict[str, Any]]) -> dict[str, Any]:
     )
 
     # Create final report
-    report = {"total_documents": total_docs, "fields": {}}
+    report: dict[str, Any] = {"total_documents": total_docs, "fields": {}}
 
     for field in sorted_fields:
         report["fields"][field] = {
@@ -169,55 +161,49 @@ def process_document(
     fields_values: dict[str, set],
 ) -> None:
     """
-    Process a document recursively to gather field information.
+    Process a document to extract field information
 
     Args:
-        doc: Document dictionary
-        prefix: Field name prefix for nested fields
+        doc: Document to process
+        prefix: Current field prefix (for nested fields)
         fields_presence: Dictionary to track field presence
         fields_types: Dictionary to track field types
-        fields_values: Dictionary to track field values
+        fields_values: Dictionary to track unique field values
     """
     for key, value in doc.items():
-        field_name = f"{prefix}.{key}" if prefix else key
-
-        # Count field presence
+        field_name = f"{prefix}{key}" if prefix else key
         fields_presence[field_name] += 1
 
-        # Determine and count field type
-        if value is None:
-            type_name = "null"
-        elif isinstance(value, dict):
-            type_name = "object"
-            # Recursively process nested object
+        # Determine the type
+        type_name = type(value).__name__
+
+        # For nested objects, recurse
+        if isinstance(value, dict):
             process_document(
-                value, field_name, fields_presence, fields_types, fields_values
+                value, f"{field_name}.", fields_presence, fields_types, fields_values
             )
-        elif isinstance(value, list):
-            type_name = "array"
-            # Don't track values for arrays, but count presence
-            # Process array elements if they're objects
-            for i, item in enumerate(value):
+        # For arrays, process each element
+        elif (
+            isinstance(value, list)
+            and value
+            and not isinstance(value[0], (int, float, str, bool))
+        ):
+            for item in value:
                 if isinstance(item, dict):
                     process_document(
                         item,
-                        f"{field_name}[{i}]",
+                        f"{field_name}[].",
                         fields_presence,
                         fields_types,
                         fields_values,
                     )
-        else:
-            type_name = type(value).__name__
-            # Add value for cardinality calculation (convert to string to ensure hashability)
-            # Only track if not too large to prevent memory issues
-            if not isinstance(value, (bytes, bytearray)) and (
-                not isinstance(value, str) or len(value) < 1000
-            ):
-                try:
-                    fields_values[field_name].add(str(value))
-                except:
-                    # Skip unhashable or problematic values
-                    pass
+        # For simple values, add to the set of unique values if it's a simple type
+        elif isinstance(value, (int, float, str, bool)):
+            try:
+                fields_values[field_name].add(str(value))
+            except TypeError:
+                # Skip unhashable or problematic values
+                pass
 
         fields_types[field_name][type_name] += 1
 
@@ -228,37 +214,45 @@ def print_report(report: dict[str, Any]) -> None:
     print(f"Found {len(report['fields'])} distinct fields\n")
 
     print(
-        "| {:<30} | {:^10} | {:<30} | {:>10} |".format(
-            "Field", "Presence %", "Types", "Cardinality"
-        )
+        f"| {'Field':<30} | {'Presence %':^10} | {'Types':<30} | {'Cardinality':>10} |"
     )
-    print("|{:-<30}-|-{:-^10}-|-{:-<30}-|-{:->10}-|".format("", "", "", ""))
+    print(f"|{'-'*30}-|{'-'*10}-|{'-'*30}-|{'-'*10}-|")
 
     for field, data in report["fields"].items():
-        presence = f"{data['presence_percentage']}%"
-        types = ", ".join(data["types"].keys())
-        cardinality = data["cardinality"]
+        # Truncate type information if needed
+        type_str = str(data["types"])
+        if len(type_str) > 30:
+            type_str = type_str[:27] + "..."
 
-        print(f"| {field:<30} | {presence:^10} | {types:<30} | {cardinality:>10} |")
+        print(
+            f"| {field:<30} | {data['presence_percentage']:^10.2f} | {type_str:<30} | {data['cardinality']:>10} |"
+        )
 
 
 def main():
     """Main function"""
     setup_logging()
-    args, env_vars = parse_args()
+    load_env_variables()
+    args = parse_args()
 
     try:
-        # Initialize ElasticsearchService
+        # Connect to Elasticsearch
+        es_host = os.getenv("ES_HOST", "localhost")
+        es_port = int(os.getenv("ES_PORT", "9200"))
+        es_index = os.getenv("ES_INDEX", "imago")
+        es_username = os.getenv("ES_USERNAME", "")
+        es_password = os.getenv("ES_PASSWORD", "")
+
+        # Initialize Elasticsearch service
         es_service = ElasticsearchService(
-            host=env_vars["host"],
-            port=env_vars["port"],
-            index=env_vars["index"],
-            username=env_vars["username"],
-            password=env_vars["password"],
-            verify_certs=False,
+            host=es_host,
+            port=es_port,
+            index=es_index,
+            username=es_username,
+            password=es_password,
         )
 
-        # Get random document sample
+        # Fetch random sample of documents
         documents = get_random_sample(es_service, args.sample_size)
 
         # Analyze field properties
@@ -269,12 +263,12 @@ def main():
 
         # Save report to file if requested
         if args.output:
-            with open(args.output, "w") as f:
+            with open(args.output, "w", encoding="utf-8") as f:
                 json.dump(report, f, indent=2)
-            logging.info(f"Report saved to {args.output}")
+            logging.info("Report saved to %s", args.output)
 
-    except Exception as e:
-        logging.error(f"Error: {e}")
+    except (ValueError, ConnectionError, IOError) as e:
+        logging.error("Error: %s", e)
         sys.exit(1)
 
 

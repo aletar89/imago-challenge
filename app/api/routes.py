@@ -1,8 +1,9 @@
-from flask import Blueprint, jsonify, request, current_app
-import os
-from typing import Any
+"""API routes for the application.
 
-from app.models.media_item import MediaItem
+This module defines the API endpoints for the media search functionality.
+"""
+
+from flask import Blueprint, jsonify, request, current_app
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 

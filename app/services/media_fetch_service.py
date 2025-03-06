@@ -1,6 +1,10 @@
-import os
+"""Media fetch service abstraction.
+
+This module provides the abstract base class for services that fetch media
+items from various sources.
+"""
+
 from abc import ABC, abstractmethod
-from typing import Any
 
 from app.models.media_item import MediaItem
 
@@ -50,7 +54,7 @@ class MediaFetchService(ABC):
         Returns:
             Tuple containing (total_count, list of MediaItem objects)
         """
-        pass
+        # This is an abstract method, no implementation needed
 
     @staticmethod
     def normalize_media_item(media_item: MediaItem) -> None:
