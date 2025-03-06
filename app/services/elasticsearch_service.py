@@ -96,13 +96,13 @@ class ElasticsearchService(MediaFetchService):
             match_query = {
                 "multi_match": {
                     "query": query,
-                    "fields": ["suchtext", "fotografen"],
+                    "fields": ["suchtext", "description", "title"],
                 }
             }
         else:
+            # Fallback to match all if no query is provided
             match_query = {"match_all": {}}
 
-        # If we have filters, build a filtered query
         if filters and len(filters) > 0:
             filter_conditions: list[dict[str, Any]] = []
 
@@ -135,7 +135,7 @@ class ElasticsearchService(MediaFetchService):
 
         return search_query
 
-    def _process_search_results(self, response: Any) -> tuple[int, list[MediaItem]]:
+    def process_search_results(self, response: Any) -> tuple[int, list[MediaItem]]:
         """Process Elasticsearch search results.
 
         Args:
@@ -154,13 +154,7 @@ class ElasticsearchService(MediaFetchService):
         total = hits.get("total", {}).get("value", 0)
         hits_list = hits.get("hits", [])
 
-        results: list[MediaItem] = []
-        for hit in hits_list:
-            # Convert ES hit to MediaItem
-            media_item = self.convert_hit_to_media_item(hit)
-            results.append(media_item)
-
-        return total, results
+        return total, [self.convert_hit_to_media_item(hit) for hit in hits_list]
 
     def convert_hit_to_media_item(self, hit: dict[str, Any]) -> MediaItem:
         """Convert an Elasticsearch hit to a MediaItem.
@@ -208,11 +202,7 @@ class ElasticsearchService(MediaFetchService):
         """
         # Ensure bildnummer is padded to 10 characters
         padded_bildnummer = bildnummer.zfill(10)
-
-        # Get base URL from environment variables with default
         base_url = os.environ.get("IMAGE_BASE_URL")
-
-        # Construct the URL using the formula: IMAGE_BASE_URL + "/bild/" + DB + "/" + MEDIA_ID
         return f"{base_url}/bild/{db}/{padded_bildnummer}/s.jpg"
 
 
