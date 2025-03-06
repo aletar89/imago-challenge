@@ -5,6 +5,7 @@ items from various sources.
 """
 
 from abc import ABC, abstractmethod
+import bleach
 
 from app.models.media_item import MediaItem
 
@@ -63,25 +64,11 @@ class MediaFetchService(ABC):
         Args:
             media_item: The media item to normalize
         """
-        # Set default values for missing fields in additional_data
-        defaults = {
-            "bildnummer": "",
-            "hoehe": 0,
-            "breite": 0,
-            "db": "st",
-        }
-
-        for field, default_value in defaults.items():
-            if field not in media_item.additional_data:
-                media_item.additional_data[field] = default_value
-
-        # Convert bildnummer to string if it's an integer
-        bildnummer = media_item.additional_data.get("bildnummer")
-        if isinstance(bildnummer, int):
-            media_item.additional_data["bildnummer"] = str(bildnummer)
-
-        # Convert hoehe and breite to integers if they're strings
-        for field in ["hoehe", "breite"]:
-            value = media_item.additional_data.get(field)
-            if isinstance(value, str) and value.isdigit():
-                media_item.additional_data[field] = int(value)
+        # Sanitize all string values in additional_data to prevent security issues
+        for key, value in media_item.additional_data.items():
+            if isinstance(value, str):
+                # Clean the string, removing all HTML tags
+                sanitized = bleach.clean(value, strip=True, tags=[])
+                # Limit string length for additional safety
+                sanitized = sanitized[:500]  # Reasonable maximum length
+                media_item.additional_data[key] = sanitized

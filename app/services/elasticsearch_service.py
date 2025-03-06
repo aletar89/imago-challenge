@@ -180,6 +180,12 @@ class ElasticsearchService(MediaFetchService):
             photographer=source.get("fotografen", ""),
             date=source.get("datum", ""),
             score=hit.get("_score", 0),
+            additional_data={
+                "bildnummer": "",
+                "hoehe": 0,
+                "breite": 0,
+                "db": "st",
+            },  # default values
         )
 
         # Add all other fields to additional_data
