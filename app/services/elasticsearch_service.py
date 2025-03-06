@@ -172,25 +172,31 @@ class ElasticsearchService(MediaFetchService):
             Populated MediaItem
         """
         source = hit.get("_source", {})
+        suchtext = source.get("suchtext", "")
+
+        # Set title and description with fallback to suchtext
+        title = source.get("title", suchtext[:50].strip())
+        description = source.get("description", suchtext)
 
         # Create a MediaItem instance
         media_item = MediaItem(
             id=hit.get("_id", ""),
-            search_text=source.get("suchtext", ""),
+            title=title,
+            description=description,
             photographer=source.get("fotografen", ""),
             date=source.get("datum", ""),
-            score=hit.get("_score", 0),
             additional_data={
                 "bildnummer": "",
                 "hoehe": 0,
                 "breite": 0,
                 "db": "st",
+                "score": hit.get("_score", 0),  # Move score to additional_data
             },  # default values
         )
 
         # Add all other fields to additional_data
         for key, value in source.items():
-            if key not in ["suchtext", "fotografen", "datum"]:
+            if key not in ["title", "description", "fotografen", "datum"]:
                 media_item.additional_data[key] = value
 
         # Add thumbnail URL

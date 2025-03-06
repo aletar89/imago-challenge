@@ -149,6 +149,7 @@
                 <img src="" class="card-img-top media-img" alt="Media Image">
                 <div class="card-body">
                     <h5 class="card-title media-title">Media Title</h5>
+                    <p class="card-text media-description text-muted small mb-2">Description text</p>
                     <p class="card-text photographer">Photographer Name</p>
                     <p class="card-text media-date">Date</p>
                     <button class="btn btn-sm btn-outline-primary view-details">View Details</button>
@@ -267,11 +268,14 @@
                 // Set image
                 const img = clone.querySelector('.media-img');
                 img.src = media.thumbnail_url || '';
-                img.alt = media.search_text || 'Media image';
+                img.alt = media.title || 'Media image';
                 
                 // Set title and info
                 const title = clone.querySelector('.media-title');
-                title.textContent = truncateText(media.search_text || 'Untitled', 50);
+                title.textContent = truncateText(media.title || 'Untitled', 50);
+                
+                const description = clone.querySelector('.media-description');
+                description.textContent = truncateText(media.description || '', 100);
                 
                 const photographer = clone.querySelector('.photographer');
                 photographer.textContent = media.photographer || 'Unknown photographer';

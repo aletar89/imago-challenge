@@ -69,6 +69,30 @@ Filter parameters:
   - `photographer`: Filter by photographer name
   - `min_date`/`max_date`: Filter by date range
 
+Response format:
+```json
+{
+  "total": 42,
+  "hits": [
+    {
+      "id": "media123",
+      "title": "Example Media Title",
+      "description": "Detailed description of the media item",
+      "photographer": "Photographer Name",
+      "date": "2023-04-15",
+      "thumbnail_url": "https://example.com/thumbnail.jpg",
+      "additional_data": {
+        "score": 0.95,
+        "bildnummer": "1234567890",
+        "db": "st",
+        "hoehe": 300,
+        "breite": 400
+      }
+    }
+  ]
+}
+```
+
 
 ## Data Normalization
 
@@ -80,6 +104,10 @@ The application normalizes media data to ensure consistency and security:
 - Sanitized strings are limited to a reasonable maximum length (500 characters)
 - Default values are provided for missing required fields
 - Thumbnails are generated with consistent URL patterns
+- Title and description fields are derived from available data:
+  - If title is not available, a truncated version of the search text is used
+  - If description is not available, the full search text is used
+- Relevance scores are stored in the additional_data field
 
 ## Monitoring
 

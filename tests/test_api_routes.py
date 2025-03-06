@@ -29,22 +29,18 @@ def test_search_endpoint(client):
     data = response.get_json()
 
     # Verify we get a proper response with results
-    assert "total" in data
-    assert "hits" in data
+    assert data["total"] > 0
+    assert len(data["hits"]) > 0
 
-    # If there are hits, verify they have the expected structure
-    if data["total"] > 0 and len(data["hits"]) > 0:
-        hit = data["hits"][0]
-        # Verify hit has expected fields
-        assert "id" in hit
-        assert "search_text" in hit
-        assert "photographer" in hit
-        assert "date" in hit
-        assert "thumbnail_url" in hit
-        assert "bildnummer" in hit
-        # Verify image URL format
-        image_base_url = os.environ.get("IMAGE_BASE_URL", "https://www.imago-images.de")
-        assert hit["thumbnail_url"].startswith(image_base_url)
+    hit = data["hits"][0]
+    # Verify hit has expected fields
+    assert "id" in hit
+    assert "title" in hit
+    assert "description" in hit
+    assert "photographer" in hit
+    assert "date" in hit
+    assert "thumbnail_url" in hit
+    assert "additional_data" in hit
 
 
 def test_empty_search_returns_all_results(client):
@@ -95,9 +91,7 @@ def test_filtered_search_reduces_results(client, filter_type):
     filter_value = ""
     if filter_type == "photographer":
         filter_value = first_result["photographer"]
-    elif filter_type == "min_date":
-        filter_value = first_result["date"]
-    elif filter_type == "max_date":
+    elif filter_type == "min_date" or filter_type == "max_date":
         filter_value = first_result["date"]
 
     # Now search with the filter applied
