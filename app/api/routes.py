@@ -3,7 +3,9 @@
 This module defines the API endpoints for the media search functionality.
 """
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, current_app, jsonify, request
+
+from app.services.monitoring import monitor_api
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -31,6 +33,7 @@ def build_image_url(base_url: str, item: dict) -> str:
 
 
 @api_bp.route("/search", methods=["GET"])
+@monitor_api(endpoint="search")
 def search():
     """
     Search endpoint that allows searching media by keywords with optional filtering
