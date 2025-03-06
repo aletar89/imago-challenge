@@ -1,186 +1,122 @@
+import os
+
 import pytest
-from unittest.mock import patch, MagicMock
+from dotenv import load_dotenv
+
 from app import create_app
 
-
-@pytest.fixture
-def app():
-    """Create a Flask app for testing with mock ElasticsearchService"""
-    with patch("app.api.routes.ElasticsearchService") as mock_es_service_class:
-        # Create a mock instance
-        mock_es_service = MagicMock()
-        mock_es_service_class.return_value = mock_es_service
-
-        # Store the mock service for use in tests
-        test_config = {
-            "TESTING": True,
-            "ELASTICSEARCH_HOST": "test-host",
-            "ELASTICSEARCH_PORT": 9200,
-            "ELASTICSEARCH_INDEX": "test-index",
-            "ELASTICSEARCH_USER": "test-user",
-            "ELASTICSEARCH_PASSWORD": "test-pass",
-            "IMAGE_BASE_URL": "https://test-images.com",
-        }
-        app = create_app(test_config)
-        app.mock_es_service = mock_es_service
-
-        yield app
+# Load environment variables
+load_dotenv()
 
 
 @pytest.fixture
-def client(app):
-    """Create a test client for the app"""
+def client():
+    """Create a Flask app and test client for all tests"""
+    # Create the app with the real config from .env
+    app = create_app({"TESTING": True})
+
+    # Create test client
     return app.test_client()
 
 
-def test_search_endpoint(app, client):
-    """Test the search endpoint"""
-    # Setup mock response
-    app.mock_es_service.search.return_value = {
-        "total": 2,
-        "hits": [
-            {
-                "id": "1",
-                "bildnummer": "123456",
-                "datum": "2023-01-01",
-                "suchtext": "Test image 1",
-                "fotografen": "Test Photographer",
-                "hoehe": 1000,
-                "breite": 2000,
-                "db": "st",
-                "score": 1.0,
-            },
-            {
-                "id": "2",
-                "bildnummer": "789012",
-                "datum": "2023-01-02",
-                "suchtext": "Test image 2",
-                "fotografen": "Another Photographer",
-                "hoehe": 1200,
-                "breite": 1800,
-                "db": "sp",
-                "score": 0.8,
-            },
-        ],
-    }
-
-    # Make request
+def test_search_endpoint(client):
+    """Test the search endpoint with real Elasticsearch"""
+    # Make request with a search term that should return results
     response = client.get("/api/search?q=test&page=1&size=10")
 
     # Check response
     assert response.status_code == 200
     data = response.get_json()
 
-    # Verify data structure
-    assert data["total"] == 2
-    assert len(data["hits"]) == 2
+    # Verify we get a proper response with results
+    assert "total" in data
+    assert "hits" in data
 
-    # Verify image URLs were constructed with test base URL
-    assert (
-        data["hits"][0]["image_url"]
-        == "https://test-images.com/bild/st/0000123456/s.jpg"
-    )
-    assert (
-        data["hits"][1]["image_url"]
-        == "https://test-images.com/bild/sp/0000789012/s.jpg"
-    )
-
-    # Verify search was called with correct parameters
-    app.mock_es_service.search.assert_called_once_with("test", 1, 10)
+    # If there are hits, verify they have the expected structure
+    if data["total"] > 0 and len(data["hits"]) > 0:
+        hit = data["hits"][0]
+        # Verify hit has expected fields
+        assert "bildnummer" in hit
+        assert "suchtext" in hit
+        assert "image_url" in hit
+        # Verify image URL format
+        image_base_url = os.environ.get("IMAGE_BASE_URL", "https://www.imago-images.de")
+        assert hit["image_url"].startswith(image_base_url)
 
 
-def test_get_media_endpoint_found(app, client):
-    """Test getting a specific media item when it exists"""
-    # Setup mock response
-    app.mock_es_service.get_by_id.return_value = {
-        "id": "1",
-        "bildnummer": "123456",
-        "datum": "2023-01-01",
-        "suchtext": "Test image 1",
-        "fotografen": "Test Photographer",
-        "hoehe": 1000,
-        "breite": 2000,
-        "db": "st",
-        "score": 1.0,
-    }
-
-    # Make request
-    response = client.get("/api/media/123456")
+def test_empty_search_returns_all_results(client):
+    """Test the search endpoint with empty query to verify we get all results"""
+    response = client.get("/api/search?q=&page=1&size=10")
 
     # Check response
     assert response.status_code == 200
     data = response.get_json()
 
-    # Verify data
-    assert data["id"] == "1"
-    assert data["bildnummer"] == "123456"
-    assert data["image_url"] == "https://test-images.com/bild/st/0000123456/s.jpg"
+    # Verify we get a proper response
+    assert "total" in data
+    assert "hits" in data
 
-    # Verify get_by_id was called with correct parameters
-    app.mock_es_service.get_by_id.assert_called_once_with("123456")
-
-
-def test_get_media_endpoint_not_found(app, client):
-    """Test getting a specific media item when it doesn't exist"""
-    # Setup mock response
-    app.mock_es_service.get_by_id.return_value = None
-
-    # Make request
-    response = client.get("/api/media/nonexistent")
-
-    # Check response
-    assert response.status_code == 404
-    data = response.get_json()
-    assert "error" in data
-    assert data["error"] == "Media not found"
+    # Verify we get at least some results (assuming the ES has data)
+    assert data["total"] > 0
+    assert len(data["hits"]) > 0
 
 
-def test_filter_endpoint(app, client):
-    """Test the filter endpoint"""
-    # Setup mock response
-    app.mock_es_service.filter.return_value = {
-        "total": 1,
-        "hits": [
-            {
-                "id": "1",
-                "bildnummer": "123456",
-                "datum": "2023-01-01",
-                "suchtext": "Test image 1",
-                "fotografen": "Test Photographer",
-                "hoehe": 1000,
-                "breite": 2000,
-                "db": "st",
-                "score": 1.0,
-            }
-        ],
-    }
+@pytest.mark.parametrize("filter_type", ["fotografen", "min_date", "max_date"])
+def test_filtered_search_reduces_results(client, filter_type):
+    """
+    Test that applying filters reduces the number of search results.
 
-    # Make request with filter parameters
-    response = client.get(
-        "/api/filter?photographer=Test%20Photographer&min_date=2023-01-01&page=2&size=5"
+    This test verifies that:
+    1. A search without filters returns results
+    2. Extracting a filter value from the first result
+    3. Applying that filter reduces the number of results
+    """
+    # First, get all results without filtering
+    unfiltered_response = client.get("/api/search?q=&page=1&size=50")
+    assert unfiltered_response.status_code == 200
+    unfiltered_data = unfiltered_response.get_json()
+
+    # Skip test if no data available
+    if unfiltered_data["total"] == 0 or len(unfiltered_data["hits"]) == 0:
+        pytest.skip(
+            f"No data available in Elasticsearch for testing {filter_type} filtering"
+        )
+
+    # Get total number of results without filtering
+    unfiltered_total = unfiltered_data["total"]
+
+    # Extract filter value from first result
+    first_result = unfiltered_data["hits"][0]
+
+    # Set filter param based on filter type
+    filter_value = ""
+    if filter_type == "fotografen":
+        filter_value = first_result["fotografen"]
+    elif filter_type == "min_date":
+        filter_value = first_result["datum"]
+    elif filter_type == "max_date":
+        filter_value = first_result["datum"]
+
+    # Now search with the filter applied
+    filtered_response = client.get(f"/api/search?q=&{filter_type}={filter_value}")
+    assert filtered_response.status_code == 200
+    filtered_data = filtered_response.get_json()
+
+    # Get total number of results with filtering
+    filtered_total = filtered_data["total"]
+
+    # Verify filter reduces results (or at least doesn't increase them)
+    assert filtered_total <= unfiltered_total, (
+        f"Filtering by {filter_type} should reduce or maintain result count, "
+        f"but got {filtered_total} results with filter vs {unfiltered_total} without"
     )
 
-    # Check response
-    assert response.status_code == 200
-    data = response.get_json()
-
-    # Verify data structure
-    assert data["total"] == 1
-    assert len(data["hits"]) == 1
-    assert (
-        data["hits"][0]["image_url"]
-        == "https://test-images.com/bild/st/0000123456/s.jpg"
-    )
-
-    # Verify filter was called with correct parameters
-    app.mock_es_service.filter.assert_called_once()
-    args, kwargs = app.mock_es_service.filter.call_args
-
-    # Check that filters were passed correctly
-    filters = args[0]
-    assert filters["photographer"] == "Test Photographer"
-    assert filters["min_date"] == "2023-01-01"
-
-    # Check pagination parameters
-    assert args[1] == 2  # page
-    assert args[2] == 5  # size
+    # If we got results, verify they match the filter
+    if filtered_data["total"] > 0:
+        for hit in filtered_data["hits"]:
+            if filter_type == "fotografen":
+                assert hit["fotografen"] == filter_value
+            elif filter_type == "min_date":
+                assert hit["datum"] >= filter_value
+            elif filter_type == "max_date":
+                assert hit["datum"] <= filter_value

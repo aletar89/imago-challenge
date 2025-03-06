@@ -192,6 +192,7 @@ htmlcov/
 
 # IDE
 .idea/
+.cursor/
 .vscode/
 *.swp
 *.swo

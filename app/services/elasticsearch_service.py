@@ -1,9 +1,8 @@
-from elasticsearch import Elasticsearch
 import logging
-from typing import Any, Tuple, Optional, Union, cast
-from elasticsearch.helpers import bulk
-from elasticsearch.exceptions import NotFoundError
-import json
+import os
+from typing import Any, Optional
+
+from elasticsearch import Elasticsearch
 
 
 class ElasticsearchService:
@@ -34,6 +33,7 @@ class ElasticsearchService:
             host = f"https://{host}"
 
         self.index = index
+
         auth = None
         if username and password:
             auth = (username, password)
@@ -45,13 +45,20 @@ class ElasticsearchService:
         )
         logging.info(f"Connected to Elasticsearch at {host}:{port}")
 
-    def search(self, query: str, page: int = 1, size: int = 10) -> dict[str, Any]:
-        """Search for media content.
+    def search(
+        self,
+        query: str,
+        page: int = 1,
+        size: int = 10,
+        filters: Optional[dict[str, str]] = None,
+    ) -> dict[str, Any]:
+        """Search for media content with optional filtering.
 
         Args:
             query: The search query
             page: Page number (starting from 1)
             size: Number of results per page
+            filters: Optional dictionary with filter criteria
 
         Returns:
             Dictionary with total count and search results
@@ -60,91 +67,51 @@ class ElasticsearchService:
         from_value = (page - 1) * size
 
         # Build the query
-        search_query: dict[str, Any]
         if query:
-            search_query = {
+            match_query = {
                 "multi_match": {
                     "query": query,
                     "fields": ["suchtext", "fotografen"],
                 }
             }
         else:
-            search_query = {"match_all": {}}
+            match_query = {"match_all": {}}
+
+        # If we have filters, build a filtered query
+        if filters and len(filters) > 0:
+            filter_conditions: list[dict[str, Any]] = []
+
+            if "photographer" in filters:
+                filter_conditions.append(
+                    {"term": {"fotografen": filters["photographer"]}}
+                )
+
+            if "min_date" in filters:
+                filter_conditions.append(
+                    {"range": {"datum": {"gte": filters["min_date"]}}}
+                )
+
+            if "max_date" in filters:
+                filter_conditions.append(
+                    {"range": {"datum": {"lte": filters["max_date"]}}}
+                )
+
+            # Add any additional custom filters
+            for key, value in filters.items():
+                if key not in ["photographer", "min_date", "max_date"]:
+                    filter_conditions.append({"term": {key: value}})
+
+            # Combine match query with filters
+            search_query: dict[str, Any] = {
+                "bool": {"must": match_query, "filter": filter_conditions}
+            }
+        else:
+            search_query = match_query
 
         # Execute the search
         response = self.client.search(
             index=self.index,
             query=search_query,
-            from_=from_value,
-            size=size,
-        )
-
-        # Process the results
-        return self._process_search_results(response)
-
-    def get_by_id(self, media_id: str) -> Optional[dict[str, Any]]:
-        """Get media content by ID.
-
-        Args:
-            media_id: The media ID to retrieve
-
-        Returns:
-            Media item if found, None otherwise
-        """
-        id_query: dict[str, Any] = {"term": {"bildnummer": media_id}}
-
-        # Execute the search
-        response = self.client.search(
-            index=self.index,
-            query=id_query,
-            size=1,
-        )
-
-        # Process the results
-        results = self._process_search_results(response)
-
-        # Return the first hit if there are any
-        if results["total"] > 0:
-            return results["hits"][0]
-        return None
-
-    def filter(
-        self, filters: dict[str, str], page: int = 1, size: int = 10
-    ) -> dict[str, Any]:
-        """Filter media content by various criteria.
-
-        Args:
-            filters: Dictionary with filter criteria
-            page: Page number (starting from 1)
-            size: Number of results per page
-
-        Returns:
-            Dictionary with total count and filtered results
-        """
-        # Calculate from value for pagination
-        from_value = (page - 1) * size
-
-        # Build filter conditions
-        filter_conditions: list[dict[str, Any]] = []
-
-        if "photographer" in filters:
-            filter_conditions.append({"term": {"fotografen": filters["photographer"]}})
-
-        if "min_date" in filters:
-            min_date_range: dict[str, Any] = {"datum": {"gte": filters["min_date"]}}
-            filter_conditions.append({"range": min_date_range})
-
-        if "max_date" in filters:
-            max_date_range: dict[str, Any] = {"datum": {"lte": filters["max_date"]}}
-            filter_conditions.append({"range": max_date_range})
-
-        # Build the query
-        filter_query: dict[str, Any] = {"bool": {"filter": filter_conditions}}
-
-        # Execute the search
-        response = self.client.search(
-            index=self.index,
-            query=filter_query,
             from_=from_value,
             size=size,
         )
@@ -190,7 +157,8 @@ class ElasticsearchService:
 
         return {"total": total, "hits": results}
 
-    def _normalize_item(self, item: dict[str, Any]) -> None:
+    @staticmethod
+    def _normalize_item(item: dict[str, Any]) -> None:
         """Normalize item fields.
 
         Args:
@@ -220,7 +188,8 @@ class ElasticsearchService:
             if isinstance(item[field], str) and item[field].isdigit():
                 item[field] = int(item[field])
 
-    def _build_thumbnail_url(self, bildnummer: str, db: str) -> str:
+    @staticmethod
+    def _build_thumbnail_url(bildnummer: str, db: str) -> str:
         """Build the thumbnail URL for a media item.
 
         Args:
@@ -230,4 +199,37 @@ class ElasticsearchService:
         Returns:
             The thumbnail URL
         """
-        return f"https://www.swissdoxarchives.ch/smartfolder/thumbview/thumbnail?bildnummer={bildnummer}&db={db}"
+        # Ensure bildnummer is padded to 10 characters
+        padded_bildnummer = bildnummer.zfill(10)
+
+        # Get base URL from environment variables with default
+        base_url = os.environ.get("IMAGE_BASE_URL")
+
+        # Construct the URL using the formula: IMAGE_BASE_URL + "/bild/" + DB + "/" + MEDIA_ID
+        return f"{base_url}/bild/{db}/{padded_bildnummer}/s.jpg"
+
+
+def init_elasticsearch_service() -> ElasticsearchService:
+    """
+    Initialize the Elasticsearch service using environment variables.
+    This should be called once during application startup.
+
+    Returns:
+        ElasticsearchService: The initialized Elasticsearch service
+    """
+    # Load configuration from environment variables
+    host = os.environ.get("ELASTICSEARCH_HOST", "http://localhost")
+    port = int(os.environ.get("ELASTICSEARCH_PORT", "9200"))
+    index = os.environ.get("ELASTICSEARCH_INDEX", "media")
+    username = os.environ.get("ELASTICSEARCH_USER", "")
+    password = os.environ.get("ELASTICSEARCH_PASSWORD", "")
+
+    # Initialize the service
+    return ElasticsearchService(
+        host=host,
+        port=port,
+        index=index,
+        username=username,
+        password=password,
+        verify_certs=False,
+    )

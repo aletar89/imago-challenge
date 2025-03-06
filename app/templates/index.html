@@ -213,22 +213,17 @@
             const minDate = minDateFilter.value;
             const maxDate = maxDateFilter.value;
             
-            let url;
+            // Always use the search endpoint with appropriate parameters
+            const url = '/api/search';
             let params = new URLSearchParams();
             
-            // Determine if we should use search or filter endpoint
-            if (query && !photographer && !minDate && !maxDate) {
-                // Use search endpoint if only query provided
-                url = '/api/search';
-                params.append('q', query);
-            } else {
-                // Use filter endpoint for advanced filtering
-                url = '/api/filter';
-                if (query) params.append('query', query);
-                if (photographer) params.append('photographer', photographer);
-                if (minDate) params.append('min_date', minDate);
-                if (maxDate) params.append('max_date', maxDate);
-            }
+            // Add search query parameter (can be empty for filter-only searches)
+            params.append('q', query);
+            
+            // Add filter parameters if they exist
+            if (photographer) params.append('photographer', photographer);
+            if (minDate) params.append('min_date', minDate);
+            if (maxDate) params.append('max_date', maxDate);
             
             // Add pagination parameters
             params.append('page', currentPage);
