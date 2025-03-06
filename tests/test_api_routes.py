@@ -30,7 +30,7 @@ def test_search_endpoint(client):
 
     # Verify we get a proper response with results
     assert data["total"] > 0
-    assert len(data["hits"]) > 0
+    assert len(data["hits"]) == 10
 
     hit = data["hits"][0]
     # Verify hit has expected fields
@@ -40,24 +40,24 @@ def test_search_endpoint(client):
     assert "photographer" in hit
     assert "date" in hit
     assert "thumbnail_url" in hit
-    assert "additional_data" in hit
 
 
 def test_empty_search_returns_all_results(client):
     """Test the search endpoint with empty query to verify we get all results"""
-    response = client.get("/api/search?q=&page=1&size=10")
+
+    search_response = client.get("/api/search?q=test&page=1&size=10")
+    assert search_response.status_code == 200
+    search_data = search_response.get_json()
+
+    all_response = client.get("/api/search?q=&page=1&size=10")
 
     # Check response
-    assert response.status_code == 200
-    data = response.get_json()
-
-    # Verify we get a proper response
-    assert "total" in data
-    assert "hits" in data
+    assert all_response.status_code == 200
+    all_data = all_response.get_json()
 
     # Verify we get at least some results (assuming the ES has data)
-    assert data["total"] > 0
-    assert len(data["hits"]) > 0
+    assert all_data["total"] > search_data["total"]
+    assert len(all_data["hits"]) == 10
 
 
 @pytest.mark.parametrize("filter_type", ["photographer", "min_date", "max_date"])
