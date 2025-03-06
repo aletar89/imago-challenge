@@ -225,7 +225,10 @@ def print_report(report: dict[str, Any]) -> None:
             type_str = type_str[:27] + "..."
 
         print(
-            f"| {field:<30} | {data['presence_percentage']:^10.2f} | {type_str:<30} | {data['cardinality']:>10} |"
+            f"| {field:<30} | "
+            f"{data['presence_percentage']:^10.2f} | "
+            f"{type_str:<30} | "
+            f"{data['cardinality']:>10} |"
         )
 
 
@@ -245,11 +248,14 @@ def main():
 
         # Initialize Elasticsearch service
         es_service = ElasticsearchService(
-            host=es_host,
-            port=es_port,
+            connection_config={
+                "host": es_host,
+                "port": es_port,
+                "username": es_username,
+                "password": es_password,
+                "ssl_options": {},
+            },
             index=es_index,
-            username=es_username,
-            password=es_password,
         )
 
         # Fetch random sample of documents

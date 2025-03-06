@@ -19,24 +19,23 @@ class ElasticsearchService(MediaFetchService):
 
     def __init__(
         self,
-        host: str,
-        port: int,
+        connection_config: dict[str, Any],
         index: str,
-        username: str = "",
-        password: str = "",
-        verify_certs: bool = False,
     ) -> None:
         """
         Initialize the Elasticsearch service
 
         Args:
-            host: Elasticsearch host
-            port: Elasticsearch port
+            connection_config: Dictionary containing connection parameters
+                (host, port, username, password, ssl_options)
             index: Index name to use
-            username: Username for authentication
-            password: Password for authentication
-            verify_certs: Whether to verify SSL certificates
         """
+        host = connection_config.get("host", "localhost")
+        port = connection_config.get("port", 9200)
+        username = connection_config.get("username", "")
+        password = connection_config.get("password", "")
+        ssl_options = connection_config.get("ssl_options", {})
+
         # Ensure host has a scheme (http:// or https://)
         if not host.startswith("http://") and not host.startswith("https://"):
             host = f"https://{host}"
@@ -50,7 +49,7 @@ class ElasticsearchService(MediaFetchService):
         self.client = Elasticsearch(
             hosts=[f"{host}:{port}"],
             basic_auth=auth,
-            verify_certs=verify_certs,
+            verify_certs=ssl_options.get("verify_certs", False),
         )
         logging.info("Connected to Elasticsearch at %s:%s", host, port)
 
@@ -241,9 +240,12 @@ def init_elasticsearch_service() -> ElasticsearchService:
 
     # Initialize the service
     return ElasticsearchService(
-        host=host,
-        port=port,
+        connection_config={
+            "host": host,
+            "port": port,
+            "username": username,
+            "password": password,
+            "ssl_options": {},
+        },
         index=index,
-        username=username,
-        password=password,
     )

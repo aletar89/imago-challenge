@@ -53,6 +53,7 @@ def search():
     query = request.args.get("q", "")
     page = int(request.args.get("page", 1))
     size = int(request.args.get("size", 10))
+    size = min(size, 100)
 
     filters = {}
     if "photographer" in request.args:
@@ -65,14 +66,14 @@ def search():
             datetime.fromisoformat(min_date)
             filters["min_date"] = min_date
         except ValueError:
-            logging.error(f"Invalid min_date format: {min_date}")
+            logging.error("Invalid min_date format: %s", min_date)
     if "max_date" in request.args:
         max_date = request.args.get("max_date", "")
         try:
             datetime.fromisoformat(max_date)
             filters["max_date"] = max_date
         except ValueError:
-            logging.error(f"Invalid max_date format: {max_date}")
+            logging.error("Invalid max_date format: %s", max_date)
 
     # Get the Elasticsearch service from the app context
     es_service = current_app.elasticsearch

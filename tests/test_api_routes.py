@@ -1,4 +1,4 @@
-import os
+"""Tests for the API routes of the application."""
 
 import pytest
 from dotenv import load_dotenv
@@ -9,8 +9,8 @@ from app import create_app
 load_dotenv()
 
 
-@pytest.fixture
-def client():
+@pytest.fixture(name="app_client")
+def fixture_app_client():
     """Create a Flask app and test client for all tests"""
     # Create the app with the real config from .env
     app = create_app({"TESTING": True})
@@ -19,10 +19,10 @@ def client():
     return app.test_client()
 
 
-def test_search_endpoint(client):
+def test_search_endpoint(app_client):
     """Test the search endpoint with real Elasticsearch"""
     # Make request with a search term that should return results
-    response = client.get("/api/search?q=test&page=1&size=10")
+    response = app_client.get("/api/search?q=test&page=1&size=10")
 
     # Check response
     assert response.status_code == 200
@@ -42,14 +42,14 @@ def test_search_endpoint(client):
     assert "thumbnail_url" in hit
 
 
-def test_empty_search_returns_all_results(client):
+def test_empty_search_returns_all_results(app_client):
     """Test the search endpoint with empty query to verify we get all results"""
 
-    search_response = client.get("/api/search?q=test&page=1&size=10")
+    search_response = app_client.get("/api/search?q=test&page=1&size=10")
     assert search_response.status_code == 200
     search_data = search_response.get_json()
 
-    all_response = client.get("/api/search?q=&page=1&size=10")
+    all_response = app_client.get("/api/search?q=&page=1&size=10")
 
     # Check response
     assert all_response.status_code == 200
@@ -61,7 +61,7 @@ def test_empty_search_returns_all_results(client):
 
 
 @pytest.mark.parametrize("filter_type", ["photographer", "min_date", "max_date"])
-def test_filtered_search_reduces_results(client, filter_type):
+def test_filtered_search_reduces_results(app_client, filter_type):
     """
     Test that applying filters reduces the number of search results.
 
@@ -71,7 +71,7 @@ def test_filtered_search_reduces_results(client, filter_type):
     3. Applying that filter reduces the number of results
     """
     # First, get all results without filtering
-    unfiltered_response = client.get("/api/search?q=&page=1&size=50")
+    unfiltered_response = app_client.get("/api/search?q=&page=1&size=50")
     assert unfiltered_response.status_code == 200
     unfiltered_data = unfiltered_response.get_json()
 
@@ -91,11 +91,11 @@ def test_filtered_search_reduces_results(client, filter_type):
     filter_value = ""
     if filter_type == "photographer":
         filter_value = first_result["photographer"]
-    elif filter_type == "min_date" or filter_type == "max_date":
+    elif filter_type in ("min_date", "max_date"):
         filter_value = first_result["date"]
 
     # Now search with the filter applied
-    filtered_response = client.get(f"/api/search?q=&{filter_type}={filter_value}")
+    filtered_response = app_client.get(f"/api/search?q=&{filter_type}={filter_value}")
     assert filtered_response.status_code == 200
     filtered_data = filtered_response.get_json()
 

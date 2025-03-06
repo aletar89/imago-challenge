@@ -7,6 +7,7 @@ import os
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
+from app.services.elasticsearch_service import init_elasticsearch_service
 
 # Load environment variables from .env file
 load_dotenv()
@@ -37,13 +38,6 @@ def create_app(config=None):
 
     app.register_blueprint(api_bp)
     app.register_blueprint(main_bp)
-
-    # Initialize Elasticsearch service
-    # Using inside-function import to follow the same pattern and avoid potential
-    # circular dependencies with other modules that might import from app
-    from app.services.elasticsearch_service import (
-        init_elasticsearch_service,
-    )  # pylint: disable=import-outside-toplevel
 
     # Store the Elasticsearch service in the app context
     with app.app_context():

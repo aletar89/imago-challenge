@@ -5,10 +5,11 @@ This module provides decorators for monitoring API endpoints and services
 using Prometheus metrics.
 """
 
-import time
 import functools
+import time
 from typing import Any, Callable, TypeVar, cast
 
+from flask import request
 from prometheus_client import Counter, Histogram
 
 # Type variable for the decorator's function
@@ -71,14 +72,11 @@ def monitor_api(endpoint: str | None = None) -> Callable[[F], F]:
             else:
                 endpoint_name = endpoint
 
-            # Determine HTTP method (for Flask routes)
             # Try to get it from request context if available
             method = "unknown"
             try:
-                from flask import request
-
                 method = request.method
-            except (ImportError, RuntimeError):
+            except RuntimeError:
                 pass
 
             # Increment request counter
