@@ -1,13 +1,14 @@
 import logging
 import os
-from typing import Any, Optional, List, Tuple
+from typing import Any
 
 from elasticsearch import Elasticsearch
 
 from app.models.media_item import MediaItem
+from app.services.media_fetch_service import MediaFetchService
 
 
-class ElasticsearchService:
+class ElasticsearchService(MediaFetchService):
     """Service for interacting with Elasticsearch"""
 
     def __init__(
@@ -17,7 +18,7 @@ class ElasticsearchService:
         index: str,
         username: str = "",
         password: str = "",
-        verify_certs: bool = True,
+        verify_certs: bool = False,
     ) -> None:
         """
         Initialize the Elasticsearch service
@@ -47,14 +48,10 @@ class ElasticsearchService:
         )
         logging.info(f"Connected to Elasticsearch at {host}:{port}")
 
-    def search(
-        self,
-        query: str,
-        page: int = 1,
-        size: int = 10,
-        filters: dict[str, str] | None = None,
+    def fetch_media_items(
+        self, query: str, page: int, size: int, filters: dict[str, str] | None
     ) -> tuple[int, list[MediaItem]]:
-        """Search for media content with optional filtering.
+        """Fetch media items from Elasticsearch.
 
         Args:
             query: The search query
@@ -65,10 +62,36 @@ class ElasticsearchService:
         Returns:
             Tuple containing (total_count, list of MediaItem objects)
         """
+        # Build the Elasticsearch query
+        es_query = self._build_elasticsearch_query(query, filters)
+
         # Calculate from value for pagination
         from_value = (page - 1) * size
 
-        # Build the query
+        # Execute the search
+        response = self.client.search(
+            index=self.index,
+            query=es_query,
+            from_=from_value,
+            size=size,
+        )
+
+        # Process the results
+        return self._process_search_results(response)
+
+    def _build_elasticsearch_query(
+        self, query: str, filters: dict[str, str] | None
+    ) -> dict[str, Any]:
+        """Build an Elasticsearch query with optional filters.
+
+        Args:
+            query: The search query
+            filters: Optional dictionary with filter criteria
+
+        Returns:
+            Elasticsearch query dictionary
+        """
+        # Build the base query
         if query:
             match_query = {
                 "multi_match": {
@@ -110,16 +133,7 @@ class ElasticsearchService:
         else:
             search_query = match_query
 
-        # Execute the search
-        response = self.client.search(
-            index=self.index,
-            query=search_query,
-            from_=from_value,
-            size=size,
-        )
-
-        # Process the results
-        return self._process_search_results(response)
+        return search_query
 
     def _process_search_results(self, response: Any) -> tuple[int, list[MediaItem]]:
         """Process Elasticsearch search results.
@@ -142,67 +156,47 @@ class ElasticsearchService:
 
         results: list[MediaItem] = []
         for hit in hits_list:
-            source = hit.get("_source", {})
-
-            # Create a MediaItem instance
-            media_item = MediaItem(
-                id=hit.get("_id", ""),
-                search_text=source.get("suchtext", ""),
-                photographer=source.get("fotografen", ""),
-                date=source.get("datum", ""),
-                score=hit.get("_score", 0),
-            )
-
-            # Add all other fields to additional_data
-            for key, value in source.items():
-                if key not in ["suchtext", "fotografen", "datum"]:
-                    media_item.additional_data[key] = value
-
-            # Normalize the data
-            self._normalize_media_item(media_item)
-
-            # Add thumbnail URL
-            bildnummer = media_item.additional_data.get("bildnummer", "")
-            db = media_item.additional_data.get("db", "")
-            if bildnummer and db:
-                media_item.thumbnail_url = self._build_thumbnail_url(bildnummer, db)
-
+            # Convert ES hit to MediaItem
+            media_item = self.convert_hit_to_media_item(hit)
             results.append(media_item)
 
         return total, results
 
-    @staticmethod
-    def _normalize_media_item(media_item: MediaItem) -> None:
-        """Normalize media item fields.
+    def convert_hit_to_media_item(self, hit: dict[str, Any]) -> MediaItem:
+        """Convert an Elasticsearch hit to a MediaItem.
 
         Args:
-            media_item: The media item to normalize
+            hit: Elasticsearch hit dictionary
+
+        Returns:
+            Populated MediaItem
         """
-        # Set default values for missing fields in additional_data
-        defaults = {
-            "bildnummer": "",
-            "hoehe": 0,
-            "breite": 0,
-            "db": "st",
-        }
+        source = hit.get("_source", {})
 
-        for field, default_value in defaults.items():
-            if field not in media_item.additional_data:
-                media_item.additional_data[field] = default_value
+        # Create a MediaItem instance
+        media_item = MediaItem(
+            id=hit.get("_id", ""),
+            search_text=source.get("suchtext", ""),
+            photographer=source.get("fotografen", ""),
+            date=source.get("datum", ""),
+            score=hit.get("_score", 0),
+        )
 
-        # Convert bildnummer to string if it's an integer
-        bildnummer = media_item.additional_data.get("bildnummer")
-        if isinstance(bildnummer, int):
-            media_item.additional_data["bildnummer"] = str(bildnummer)
+        # Add all other fields to additional_data
+        for key, value in source.items():
+            if key not in ["suchtext", "fotografen", "datum"]:
+                media_item.additional_data[key] = value
 
-        # Convert hoehe and breite to integers if they're strings
-        for field in ["hoehe", "breite"]:
-            value = media_item.additional_data.get(field)
-            if isinstance(value, str) and value.isdigit():
-                media_item.additional_data[field] = int(value)
+        # Add thumbnail URL
+        bildnummer = media_item.additional_data.get("bildnummer", "")
+        db = media_item.additional_data.get("db", "")
+        if bildnummer and db:
+            media_item.thumbnail_url = self.build_thumbnail_url(bildnummer, db)
+
+        return media_item
 
     @staticmethod
-    def _build_thumbnail_url(bildnummer: str, db: str) -> str:
+    def build_thumbnail_url(bildnummer: str, db: str) -> str:
         """Build the thumbnail URL for a media item.
 
         Args:
@@ -244,5 +238,4 @@ def init_elasticsearch_service() -> ElasticsearchService:
         index=index,
         username=username,
         password=password,
-        verify_certs=False,
     )
