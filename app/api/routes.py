@@ -1,5 +1,8 @@
 from flask import Blueprint, jsonify, request, current_app
 import os
+from typing import Any
+
+from app.models.media_item import MediaItem
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -53,23 +56,9 @@ def search():
 
     # Get the Elasticsearch service from the app context
     es_service = current_app.elasticsearch
-    results = es_service.search(query, page, size, filters)
+    total, media_items = es_service.search(query, page, size, filters)
 
-    # Transform results to include image URLs
-    base_url = os.environ.get("IMAGE_BASE_URL", "https://example.com")
-    for hit in results["hits"]:
-        hit["image_url"] = build_image_url(base_url, hit)
-
-    return jsonify(results)
-
-
-@api_bp.route("/media/<media_id>", methods=["GET"])
-def get_media(media_id):
-    """Get a specific media item by ID"""
-    try:
-        # Get the Elasticsearch service from the app context
-        es_service = current_app.elasticsearch
-        result = es_service.get_by_id(media_id)
-        return jsonify(result)
-    except Exception:
-        return jsonify({"error": "Media not found"}), 404
+    # Return the results as a dictionary
+    return jsonify(
+        {"total": total, "hits": [media_item.to_dict() for media_item in media_items]}
+    )

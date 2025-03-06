@@ -266,18 +266,18 @@
                 
                 // Set image
                 const img = clone.querySelector('.media-img');
-                img.src = media.thumbnail_url || media.image_url;
-                img.alt = media.suchtext || 'Media image';
+                img.src = media.thumbnail_url || '';
+                img.alt = media.search_text || 'Media image';
                 
                 // Set title and info
                 const title = clone.querySelector('.media-title');
-                title.textContent = truncateText(media.suchtext || 'Untitled', 50);
+                title.textContent = truncateText(media.search_text || 'Untitled', 50);
                 
                 const photographer = clone.querySelector('.photographer');
-                photographer.textContent = media.fotografen || 'Unknown photographer';
+                photographer.textContent = media.photographer || 'Unknown photographer';
                 
                 const date = clone.querySelector('.media-date');
-                date.textContent = formatDate(media.datum);
+                date.textContent = formatDate(media.date);
                 
                 // Setup view details button
                 const viewDetailsBtn = clone.querySelector('.view-details');

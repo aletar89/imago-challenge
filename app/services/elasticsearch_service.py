@@ -1,8 +1,10 @@
 import logging
 import os
-from typing import Any, Optional
+from typing import Any, Optional, List, Tuple
 
 from elasticsearch import Elasticsearch
+
+from app.models.media_item import MediaItem
 
 
 class ElasticsearchService:
@@ -50,8 +52,8 @@ class ElasticsearchService:
         query: str,
         page: int = 1,
         size: int = 10,
-        filters: Optional[dict[str, str]] = None,
-    ) -> dict[str, Any]:
+        filters: dict[str, str] | None = None,
+    ) -> tuple[int, list[MediaItem]]:
         """Search for media content with optional filtering.
 
         Args:
@@ -61,7 +63,7 @@ class ElasticsearchService:
             filters: Optional dictionary with filter criteria
 
         Returns:
-            Dictionary with total count and search results
+            Tuple containing (total_count, list of MediaItem objects)
         """
         # Calculate from value for pagination
         from_value = (page - 1) * size
@@ -119,14 +121,14 @@ class ElasticsearchService:
         # Process the results
         return self._process_search_results(response)
 
-    def _process_search_results(self, response: Any) -> dict[str, Any]:
+    def _process_search_results(self, response: Any) -> tuple[int, list[MediaItem]]:
         """Process Elasticsearch search results.
 
         Args:
             response: Elasticsearch response object or dict
 
         Returns:
-            Processed search results
+            Tuple containing (total_count, list of MediaItem objects)
         """
         # Handle both dict and ObjectApiResponse types
         if hasattr(response, "body"):
@@ -138,55 +140,66 @@ class ElasticsearchService:
         total = hits.get("total", {}).get("value", 0)
         hits_list = hits.get("hits", [])
 
-        results = []
+        results: list[MediaItem] = []
         for hit in hits_list:
-            item = hit.get("_source", {})
-            item["id"] = hit.get("_id", "")
-            item["score"] = hit.get("_score", 0)
+            source = hit.get("_source", {})
 
-            # Normalize the item
-            self._normalize_item(item)
+            # Create a MediaItem instance
+            media_item = MediaItem(
+                id=hit.get("_id", ""),
+                search_text=source.get("suchtext", ""),
+                photographer=source.get("fotografen", ""),
+                date=source.get("datum", ""),
+                score=hit.get("_score", 0),
+            )
+
+            # Add all other fields to additional_data
+            for key, value in source.items():
+                if key not in ["suchtext", "fotografen", "datum"]:
+                    media_item.additional_data[key] = value
+
+            # Normalize the data
+            self._normalize_media_item(media_item)
 
             # Add thumbnail URL
-            if "bildnummer" in item and "db" in item:
-                item["thumbnail_url"] = self._build_thumbnail_url(
-                    item["bildnummer"], item["db"]
-                )
+            bildnummer = media_item.additional_data.get("bildnummer", "")
+            db = media_item.additional_data.get("db", "")
+            if bildnummer and db:
+                media_item.thumbnail_url = self._build_thumbnail_url(bildnummer, db)
 
-            results.append(item)
+            results.append(media_item)
 
-        return {"total": total, "hits": results}
+        return total, results
 
     @staticmethod
-    def _normalize_item(item: dict[str, Any]) -> None:
-        """Normalize item fields.
+    def _normalize_media_item(media_item: MediaItem) -> None:
+        """Normalize media item fields.
 
         Args:
-            item: The item to normalize
+            media_item: The media item to normalize
         """
-        # Set default values for missing fields
+        # Set default values for missing fields in additional_data
         defaults = {
             "bildnummer": "",
-            "datum": "",
-            "suchtext": "",
-            "fotografen": "",
             "hoehe": 0,
             "breite": 0,
             "db": "st",
         }
 
         for field, default_value in defaults.items():
-            if field not in item:
-                item[field] = default_value
+            if field not in media_item.additional_data:
+                media_item.additional_data[field] = default_value
 
         # Convert bildnummer to string if it's an integer
-        if isinstance(item["bildnummer"], int):
-            item["bildnummer"] = str(item["bildnummer"])
+        bildnummer = media_item.additional_data.get("bildnummer")
+        if isinstance(bildnummer, int):
+            media_item.additional_data["bildnummer"] = str(bildnummer)
 
         # Convert hoehe and breite to integers if they're strings
         for field in ["hoehe", "breite"]:
-            if isinstance(item[field], str) and item[field].isdigit():
-                item[field] = int(item[field])
+            value = media_item.additional_data.get(field)
+            if isinstance(value, str) and value.isdigit():
+                media_item.additional_data[field] = int(value)
 
     @staticmethod
     def _build_thumbnail_url(bildnummer: str, db: str) -> str:
