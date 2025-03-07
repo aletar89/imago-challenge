@@ -13,28 +13,6 @@ from app.services.monitoring import monitor_api
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 
-def build_image_url(base_url: str, item: dict) -> str:
-    """
-    Build the image URL for a media item
-
-    Args:
-        base_url: Base URL for images
-        item: Media item data
-
-    Returns:
-        The image URL
-    """
-    if "bildnummer" not in item or "db" not in item:
-        return ""
-
-    # Ensure bildnummer is padded to 10 characters
-    padded_bildnummer = item["bildnummer"].zfill(10)
-    db = item.get("db", "st")
-
-    # Construct the URL
-    return f"{base_url}/bild/{db}/{padded_bildnummer}"
-
-
 @api_bp.route("/search", methods=["GET"])
 @monitor_api(endpoint="search")
 def search():
