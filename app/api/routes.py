@@ -55,7 +55,11 @@ def search():
 
     # Get the Elasticsearch service from the app context
     es_service = current_app.elasticsearch
-    total, media_items = es_service.search(query, page, size, filters)
+    try:
+        total, media_items = es_service.search(query, page, size, filters)
+    except Exception as e:
+        logging.error("Error searching Elasticsearch: %s", e)
+        return jsonify({"error": str(e)}), 500
 
     # Return the results as a dictionary
     return jsonify(

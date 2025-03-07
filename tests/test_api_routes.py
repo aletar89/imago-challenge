@@ -1,5 +1,6 @@
 """Tests for the API routes of the application."""
 
+from unittest.mock import patch
 import pytest
 from dotenv import load_dotenv
 
@@ -117,3 +118,95 @@ def test_filtered_search_reduces_results(app_client, filter_type):
                 assert hit["date"] >= filter_value
             elif filter_type == "max_date":
                 assert hit["date"] <= filter_value
+
+
+def test_pagination_works_correctly(app_client):
+    """Test that pagination parameters work correctly."""
+    # Get first page with 5 results
+    response_page1 = app_client.get("/api/search?q=&page=1&size=5")
+    assert response_page1.status_code == 200
+    data_page1 = response_page1.get_json()
+
+    # Get second page with 5 results
+    response_page2 = app_client.get("/api/search?q=&page=2&size=5")
+    assert response_page2.status_code == 200
+    data_page2 = response_page2.get_json()
+
+    # Verify both pages return correct number of results
+    assert len(data_page1["hits"]) == 5
+    assert len(data_page2["hits"]) == 5
+
+    # Verify the pages contain different items
+    page1_ids = [item["id"] for item in data_page1["hits"]]
+    page2_ids = [item["id"] for item in data_page2["hits"]]
+    assert not set(page1_ids).intersection(set(page2_ids))
+
+
+def test_combined_filters(app_client):
+    """Test search with multiple filters applied simultaneously."""
+    # First get all results count
+    all_response = app_client.get("/api/search?q=&page=1&size=1")
+    all_data = all_response.get_json()
+    photographer = all_data["hits"][0]["photographer"]
+    date = all_data["hits"][0]["date"]
+
+    # Get photographer filter only
+    photo_response = app_client.get(
+        f"/api/search?q=&photographer={photographer}&page=1&size=1"
+    )
+    photo_data = photo_response.get_json()
+
+    # Get date filter only
+    date_response = app_client.get(f"/api/search?q=&min_date={date}&page=1&size=1")
+    date_data = date_response.get_json()
+
+    # Get combined filter
+    combined_response = app_client.get(
+        f"/api/search?q=&photographer={photographer}&min_date={date}&page=1&size=1"
+    )
+    combined_data = combined_response.get_json()
+
+    # Combined filter should return fewer or equal results than individual filters
+    assert combined_data["total"] <= photo_data["total"]
+    assert combined_data["total"] <= date_data["total"]
+
+
+def test_invalid_pagination_params(app_client):
+    """Test handling of invalid pagination parameters."""
+    # Test negative page number
+    response = app_client.get("/api/search?q=test&page=-1&size=10")
+    assert response.status_code == 500
+
+    # Test excessive size (should be capped at 100)
+    response = app_client.get("/api/search?q=test&page=1&size=500")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert len(data["hits"]) <= 100  # Size should be capped at 100
+
+
+def test_invalid_date_format(app_client):
+    """Test handling of invalid date formats in filters."""
+    response = app_client.get("/api/search?q=test&min_date=not-a-date")
+    assert response.status_code == 200  # Should not fail but log error
+
+    # The invalid date should be ignored, results should be the same as without filter
+    control_response = app_client.get("/api/search?q=test")
+    assert response.get_json()["total"] == control_response.get_json()["total"]
+
+
+@patch("app.services.elasticsearch_service.ElasticsearchService.fetch_media_items")
+def test_elasticsearch_error_handling(mock_fetch_media_items, app_client):
+    """Test that ElasticsearchService handles errors gracefully."""
+    # Setup the mock to simulate an error
+    mock_fetch_media_items.side_effect = Exception("Connection error")
+
+    # Make a request that would trigger the error
+    response = app_client.get("/api/search?q=test")
+
+    # Verify the API returns an appropriate error response
+    assert response.status_code == 500
+
+    # Verify the error response contains the error message
+    data = response.get_json()
+    assert "error" in data
+    assert "Connection error" in data["error"]

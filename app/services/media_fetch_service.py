@@ -64,6 +64,15 @@ class MediaFetchService(ABC):
         Args:
             media_item: The media item to normalize
         """
+        # Sanitize main fields
+        media_item.title = bleach.clean(media_item.title, strip=True, tags=[])
+        media_item.description = bleach.clean(
+            media_item.description, strip=True, tags=[]
+        )
+        media_item.photographer = bleach.clean(
+            media_item.photographer, strip=True, tags=[]
+        )
+
         # Sanitize all string values in additional_data to prevent security issues
         for key, value in media_item.additional_data.items():
             if isinstance(value, str):
