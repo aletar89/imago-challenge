@@ -57,7 +57,7 @@ def search():
     es_service = current_app.elasticsearch
     try:
         total, media_items = es_service.search(query, page, size, filters)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logging.error("Error searching Elasticsearch: %s", e)
         return jsonify({"error": str(e)}), 500
 

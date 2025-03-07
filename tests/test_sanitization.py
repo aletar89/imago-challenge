@@ -1,3 +1,10 @@
+"""Tests for the sanitization functionality in the MediaFetchService.
+
+This module contains tests that verify the HTML sanitization and content normalization
+capabilities of the application, ensuring that potentially harmful content is properly
+filtered out of media items.
+"""
+
 from app.services.media_fetch_service import MediaFetchService
 from app.models.media_item import MediaItem
 
