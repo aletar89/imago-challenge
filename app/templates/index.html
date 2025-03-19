@@ -78,7 +78,10 @@
                 <div class="col-md-4">
                     <div class="form-group">
                         <label for="photographer-filter">Photographer</label>
-                        <input type="text" class="form-control" id="photographer-filter" placeholder="Filter by photographer...">
+                        <select class="form-control" id="photographer-filter">
+                            <option value="">All Photographers</option>
+                            <!-- Photographers will be loaded here -->
+                        </select>
                     </div>
                 </div>
             </div>
@@ -177,6 +180,24 @@
         const mediaDetails = document.getElementById('media-details');
         const closeDetailsBtn = document.getElementById('close-details');
         const detailsContent = document.getElementById('details-content');
+        
+        // Load photographers for dropdown
+        function loadPhotographers() {
+            fetch('/api/photographers')
+                .then(response => response.json())
+                .then(photographers => {
+                    // Sort photographers alphabetically (should already be sorted from the backend)
+                    photographers.forEach(photographer => {
+                        const option = document.createElement('option');
+                        option.value = photographer;
+                        option.textContent = photographer;
+                        photographerFilter.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading photographers:', error);
+                });
+        }
         
         // Event Listeners
         searchBtn.addEventListener('click', () => {
@@ -381,7 +402,8 @@
             }
         }
         
-        // Initial search on page load
+        // Initial photographer load and search on page load
+        loadPhotographers();
         searchMedia();
     </script>
 </body>
