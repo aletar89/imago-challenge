@@ -65,3 +65,22 @@ def search():
     return jsonify(
         {"total": total, "hits": [media_item.to_dict() for media_item in media_items]}
     )
+
+
+@api_bp.route("/photographers", methods=["GET"])
+@monitor_api(endpoint="photographers")
+def photographers():
+    """
+    Get a list of all unique photographers in the database.
+
+    Returns a JSON array of photographer names sorted alphabetically.
+    """
+    # Get the Elasticsearch service from the app context
+    es_service = current_app.elasticsearch
+    try:
+        # Get the list of unique photographers
+        photographers_list = es_service.get_unique_photographers()
+        return jsonify(photographers_list)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logging.error("Error fetching photographers from Elasticsearch: %s", e)
+        return jsonify({"error": str(e)}), 500

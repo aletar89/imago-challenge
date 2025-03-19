@@ -53,6 +53,45 @@ class ElasticsearchService(MediaFetchService):
         )
         logging.info("Connected to Elasticsearch at %s:%s", host, port)
 
+    def get_unique_photographers(self, size: int = 1000) -> list[str]:
+        """Fetch a list of unique photographers from Elasticsearch.
+
+        Args:
+            size: Maximum number of unique values to return (default: 1000)
+
+        Returns:
+            A list of unique photographer names
+        """
+        # Execute the search with aggregations
+        response = self.client.search(
+            index=self.index,
+            size=0,  # Don't return any documents, just aggregations
+            aggs={
+                "unique_photographers": {
+                    "terms": {
+                        "field": "fotografen",
+                        "size": size,
+                        "order": {"_key": "asc"},  # Sort alphabetically
+                    }
+                }
+            },
+        )
+
+        # Process aggregation results
+        if hasattr(response, "body"):
+            response_body = response.body
+        else:
+            response_body = response
+
+        buckets = (
+            response_body.get("aggregations", {})
+            .get("unique_photographers", {})
+            .get("buckets", [])
+        )
+        photographers = [bucket.get("key") for bucket in buckets if bucket.get("key")]
+
+        return photographers
+
     def fetch_media_items(
         self, query: str, page: int, size: int, filters: dict[str, str] | None
     ) -> tuple[int, list[MediaItem]]:

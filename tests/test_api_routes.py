@@ -194,6 +194,15 @@ def test_invalid_date_format(app_client):
     assert response.get_json()["total"] == control_response.get_json()["total"]
 
 
+def test_photographers_endpoint(app_client):
+    """Test the photographers endpoint."""
+    response = app_client.get("/api/photographers")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert len(data) > 0
+    assert "ABACAPRESS" in data
+
+
 @patch("app.services.elasticsearch_service.ElasticsearchService.fetch_media_items")
 def test_elasticsearch_error_handling(mock_fetch_media_items, app_client):
     """Test that ElasticsearchService handles errors gracefully."""
