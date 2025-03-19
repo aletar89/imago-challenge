@@ -219,3 +219,38 @@ def test_elasticsearch_error_handling(mock_fetch_media_items, app_client):
     data = response.get_json()
     assert "error" in data
     assert "Connection error" in data["error"]
+
+
+def test_boolean_query(app_client):
+    """Test that simple_query_string OR functionality works correctly."""
+    # Search for cat
+    cat_response = app_client.get("/api/search?q=cat&page=1&size=10")
+    cat_data = cat_response.get_json()
+    cat_count = cat_data["total"]
+
+    # Search for flower
+    flower_response = app_client.get("/api/search?q=flower&page=1&size=10")
+    flower_data = flower_response.get_json()
+    flower_count = flower_data["total"]
+
+    # Search for cat OR flower
+    combined_response = app_client.get("/api/search?q=cat | flower&page=1&size=10")
+    combined_data = combined_response.get_json()
+    combined_count = combined_data["total"]
+
+    # The OR query should return at least as many results as each individual query
+    assert combined_count >= cat_count
+    assert combined_count >= flower_count
+
+    # In most cases, it should return at least as many results as the sum of individual queries
+    # minus any overlap (but we can't strictly assert this as it depends on data)
+    # Just check it's not smaller than the larger of the two
+    assert combined_count >= max(cat_count, flower_count)
+
+    # Search for cat NOT flower
+    exclusion_response = app_client.get("/api/search?q=cat -flower&page=1&size=10")
+    exclusion_data = exclusion_response.get_json()
+    exclusion_count = exclusion_data["total"]
+
+    # The exclusion query should return fewer results than just "cat"
+    assert exclusion_count <= cat_count

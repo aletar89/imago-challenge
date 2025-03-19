@@ -138,9 +138,10 @@ class ElasticsearchService(MediaFetchService):
         # Build the base query
         if query:
             match_query = {
-                "multi_match": {
+                "simple_query_string": {
                     "query": query,
                     "fields": ["suchtext", "description", "title"],
+                    "default_operator": "and",
                 }
             }
         else:
